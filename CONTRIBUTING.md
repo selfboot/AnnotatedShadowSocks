@@ -1,6 +1,7 @@
-本项目中的 Issue 主要用来讨论代码中的 Python 知识点和 shadowsocks 相关运行机制，而不是讨论 shadowsocks 的Bug或者功能，更不是用来讨论 shadowsocks 的使用问题。
+The issue in this project is mainly used to discuss the python knowledge about the code in shadowsocks and related operating mechanism, rather than discussing the shadowsocks's bugs, or the problem when using shadowsocks.
 
-注意，在发布 Issue 之前，请先尝试Google搜索。发布 Issue 时，注意以下问题：
+Before launching any issue, try Google and search in existing issues firstly. When still have a problem, follow the guide bellow:
 
-1. 指明代码的版本和相应的文件以及行数；
-2. 说出自己的理解或者疑问；
+1. Specify the version of the code and the corresponding file (or function);
+2. Write down your own understanding or doubt;
+
