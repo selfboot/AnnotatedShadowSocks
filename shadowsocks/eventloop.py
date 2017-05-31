@@ -1,26 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2014 clowwindy
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 # from ssloop
 # https://github.com/clowwindy/ssloop
 
@@ -57,7 +37,11 @@ EVENT_NAMES = {
 
 
 class EpollLoop(object):
+    """ Encapsulate the epoll implementation in Linux, provide the consistent methods used in EventLoop.
 
+    Details about select.epoll is available:
+    https://github.com/xuelangZF/AnnotatedShadowSocks/issues/16
+    """
     def __init__(self):
         self._epoll = select.epoll()
 
@@ -75,6 +59,11 @@ class EpollLoop(object):
 
 
 class KqueueLoop(object):
+    """ Encapsulate the kqueue implementation in BSD, provide the consistent methods used in EventLoop.
+
+    Details about select.kqueue is available:
+    https://github.com/xuelangZF/AnnotatedShadowSocks/issues/21
+    """
 
     MAX_EVENTS = 1024
 
@@ -118,7 +107,11 @@ class KqueueLoop(object):
 
 
 class SelectLoop(object):
+    """ Encapsulate the select implementation for generality, provide the consistent methods used in EventLoop.
 
+    Details about select.select is available:
+    https://github.com/xuelangZF/AnnotatedShadowSocks/issues/11
+    """
     def __init__(self):
         self._r_list = set()
         self._w_list = set()
@@ -127,6 +120,8 @@ class SelectLoop(object):
     def poll(self, timeout):
         r, w, x = select.select(self._r_list, self._w_list, self._x_list,
                                 timeout)
+        # Details about defaultdict is available here:
+        # https://github.com/xuelangZF/AnnotatedShadowSocks/issues/19
         results = defaultdict(lambda: POLL_NULL)
         for p in [(r, POLL_IN), (w, POLL_OUT), (x, POLL_ERR)]:
             for fd in p[0]:
@@ -155,7 +150,23 @@ class SelectLoop(object):
 
 
 class EventLoop(object):
+    """ EventLoop is used to serve the concurrent thousands of network connections.
+
+    It encapsulates the underlying implementation of I/O interface on different platform
+    and provides more readable and convenient functions to be used in shadowsocks.
+    More details is available here:
+    https://github.com/xuelangZF/AnnotatedShadowSocks/issues/20
+    """
+
     def __init__(self):
+        """ Select I/O model depend on platform and do initial operator.
+
+        self._impl: point to the select model we use.
+        self._fd_to_f: save the mapping relation between file descriptor and socket.
+        self._handlers: save the
+        self._ref_handlers:
+        self._handlers_to_remove:
+        """
         self._iterating = False
         if hasattr(select, 'epoll'):
             self._impl = EpollLoop()
@@ -176,20 +187,32 @@ class EventLoop(object):
         logging.debug('using event model: %s', model)
 
     def poll(self, timeout=None):
+        """ Polls the set of registered file descriptors, and returns a list containing (socket, fd, event)
+        3-tuples for the descriptors that have events or errors to report.
+        """
         events = self._impl.poll(timeout)
         return [(self._fd_to_f[fd], fd, event) for fd, event in events]
 
     def add(self, f, mode):
+        """ Register a file descriptor with the specified mode in polling object.
+
+        Record the file descriptor and socket relation at the same time.
+        """
         fd = f.fileno()
         self._fd_to_f[fd] = f
         self._impl.add_fd(fd, mode)
 
     def remove(self, f):
+        """ Remove a file descriptor being tracked by the polling object.
+
+        Def the file descriptor and socket at the same time.
+        """
         fd = f.fileno()
         del self._fd_to_f[fd]
         self._impl.remove_fd(fd)
 
     def modify(self, f, mode):
+        # Modifies an already registered fd.
         fd = f.fileno()
         self._impl.modify_fd(fd, mode)
 
@@ -215,8 +238,7 @@ class EventLoop(object):
             except (OSError, IOError) as e:
                 if errno_from_exception(e) in (errno.EPIPE, errno.EINTR):
                     # EPIPE: Happens when the client closes the connection
-                    # EINTR: Happens when received a signal
-                    # handles them as soon as possible
+                    # EINTR: Happens when received a signal handles them as soon as possible
                     logging.debug('poll:%s', e)
                 else:
                     logging.error('poll:%s', e)
@@ -240,7 +262,7 @@ class EventLoop(object):
 
 # from tornado
 def errno_from_exception(e):
-    """Provides the errno from an Exception object.
+    """Extract the errno from an Exception object.
 
     There are cases that the errno attribute was not set so we pull
     the errno out of the args but if someone instatiates an Exception

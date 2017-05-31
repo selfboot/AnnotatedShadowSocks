@@ -1,26 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2014 clowwindy
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 from __future__ import absolute_import, division, print_function, \
     with_statement
 
@@ -30,12 +10,22 @@ import logging
 
 
 def compat_ord(s):
+    """ Return an integer representing the Unicode code point of the character
+
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/5
+    """
     if type(s) == int:
         return s
     return _ord(s)
 
 
 def compat_chr(d):
+    """ Return a string or bytes of one character whose ASCII code is the integer i.
+
+    The argument d must be in the range [0..255], inclusive
+    Python 2.7+ returns a string abd Python 3.3+ returns bytes.
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/6
+    """
     if bytes == str:
         return _chr(d)
     return bytes([d])
@@ -48,6 +38,11 @@ chr = compat_chr
 
 
 def to_bytes(s):
+    """ Convert string s into bytes sequence.
+
+    To python3.3+, encode str type to bytes type.
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/6
+    """
     if bytes != str:
         if type(s) == str:
             return s.encode('utf-8')
@@ -55,6 +50,11 @@ def to_bytes(s):
 
 
 def to_str(s):
+    """ Convert bytes s into str type.
+
+    To python3.3+, decode bytes type to str type.
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/6
+    """
     if bytes != str:
         if type(s) == bytes:
             return s.decode('utf-8')
@@ -62,6 +62,25 @@ def to_str(s):
 
 
 def inet_ntop(family, ipstr):
+    """ Convert a packed IP address to its standard, family-specific string representation.
+
+    :param family: Supported values for address_family are currently AF_INET and AF_INET6.
+    :param ipstr:  A 32-bit packed IPv4 address (a string four characters in length) or 128-bit ipv6.
+            such as 'abcd' or 'abcdefghabcdefgh'.
+    :return: A byte sequence, which is standard string representation for address.
+            (for example, b'7.10.0.5' or '5aef:2b::8')
+
+    Usage:
+        >>> from shadowsocks.common import inet_pton, inet_ntop
+        >>> import socket
+        >>> inet_ntop(socket.AF_INET, 'abcd')
+        '97.98.99.100'
+        >>> inet_ntop(socket.AF_INET6, 'abcdefghijklmnop')
+        '6162:6364:6566:6768:696A:6B6C:6D6E:6F70'
+
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/9
+    """
+
     if family == socket.AF_INET:
         return to_bytes(socket.inet_ntoa(ipstr))
     elif family == socket.AF_INET6:
@@ -73,6 +92,17 @@ def inet_ntop(family, ipstr):
 
 
 def inet_pton(family, addr):
+    """ Convert an IP address from its family-specific string format to a packed, binary format.
+
+    Reverse process of inet_ntop.
+
+
+    :param family: Supported values for address_family are currently AF_INET and AF_INET6.
+    :param addr: A standard, family-specific string representation of IP, such as '7.10.0.5' or '5aef:2b::8'.
+    :return: A 32-bit packed IPv4 address (a string four characters in length) or 128-bit ipv6.
+
+    # TODO
+    """
     addr = to_str(addr)
     if family == socket.AF_INET:
         return socket.inet_aton(addr)
@@ -102,6 +132,13 @@ def inet_pton(family, addr):
 
 
 def patch_socket():
+    """ Bind inet_ntop and inet_pton function to socket module.
+
+    socket.inet_pton and socket.inet_ntop are available only on most Unix platforms.
+    Here we use custom function if there are no inet_pton or inet_ntop defined.
+
+    Ref: https://docs.python.org/2/library/socket.html#socket.inet_pton
+    """
     if not hasattr(socket, 'inet_pton'):
         socket.inet_pton = inet_pton
 
@@ -169,6 +206,7 @@ def parse_header(data):
                      addrtype)
     if dest_addr is None:
         return None
+
     return addrtype, to_bytes(dest_addr), dest_port, header_length
 
 

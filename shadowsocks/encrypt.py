@@ -1,25 +1,5 @@
 #!/usr/bin/env python
 
-# Copyright (c) 2014 clowwindy
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 from __future__ import absolute_import, division, print_function, \
     with_statement
 
@@ -32,17 +12,22 @@ from shadowsocks.crypto import m2, rc4_md5, salsa20_ctr,\
     ctypes_openssl, ctypes_libsodium, table
 
 
+# Import the cipher methods from different module in crypto package.
 method_supported = {}
 method_supported.update(rc4_md5.ciphers)
 method_supported.update(salsa20_ctr.ciphers)
 method_supported.update(ctypes_openssl.ciphers)
 method_supported.update(ctypes_libsodium.ciphers)
-# let M2Crypto override ctypes_openssl
+
+# Let M2Crypto override ctypes_openssl
 method_supported.update(m2.ciphers)
 method_supported.update(table.ciphers)
 
 
 def random_string(length):
+    """ Return a string of n random bytes suitable for cryptographic use.
+    """
+
     try:
         import M2Crypto.Rand
         return M2Crypto.Rand.rand_bytes(length)
@@ -60,6 +45,7 @@ def try_cipher(key, method=None):
 def EVP_BytesToKey(password, key_len, iv_len):
     # equivalent to OpenSSL's EVP_BytesToKey() with count 1
     # so that we make the same key and iv as nodejs version
+
     if hasattr(password, 'encode'):
         password = password.encode('utf-8')
     cached_key = '%s-%d-%d' % (password, key_len, iv_len)

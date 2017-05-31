@@ -319,6 +319,7 @@ Online help: <https://github.com/clowwindy/shadowsocks>
 def _decode_list(data):
     """ 将 data 中的数据 deserialize 后保存在 list 中
 
+    主要是对 data 中的 unicode string 进行 utf-8 编码
     """
     rv = []
     for item in data:
@@ -335,6 +336,7 @@ def _decode_list(data):
 def _decode_dict(data):
     """ 将data（类型为字典）中的数据 deserialize 后保存在 dict 中
 
+    主要是对 data 中的 unicode string 进行 utf-8 编码
     该函数的作用，可以阅读 https://github.com/xuelangZF/AnnotatedShadowSocks/issues/4
     """
     rv = {}
