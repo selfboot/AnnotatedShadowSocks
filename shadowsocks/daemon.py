@@ -1,25 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2014 clowwindy
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
 
 from __future__ import absolute_import, division, print_function, \
     with_statement
@@ -31,11 +12,11 @@ import signal
 import time
 from shadowsocks import common
 
-# this module is ported from ShadowVPN daemon.c
-
 
 def daemon_exec(config):
+    # Do different operation according to the related daemon config.
     if 'daemon' in config:
+        # os.name(ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/23)
         if os.name != 'posix':
             raise Exception('daemon mode is only supported in unix')
         command = config['daemon']
@@ -60,22 +41,32 @@ def daemon_exec(config):
 
 
 def write_pid_file(pid_file, pid):
+    """ Use the pid file to govern that the daemon is only running one instance.
+
+    Open the pid file and set the close-on-exec flag firstly.
+    Then try to acquire the exclusive lock of the pid file:
+        If success, return 0 to start the daemon process.
+        else, there already is a daemon process running, return -1.
+    """
     import fcntl
     import stat
 
+    # https://github.com/xuelangZF/AnnotatedShadowSocks/issues/23
     try:
         fd = os.open(pid_file, os.O_RDWR | os.O_CREAT,
                      stat.S_IRUSR | stat.S_IWUSR)
     except OSError as e:
         logging.error(e)
         return -1
+
+    # https://github.com/xuelangZF/AnnotatedShadowSocks/issues/25
     flags = fcntl.fcntl(fd, fcntl.F_GETFD)
     assert flags != -1
     flags |= fcntl.FD_CLOEXEC
     r = fcntl.fcntl(fd, fcntl.F_SETFD, flags)
     assert r != -1
-    # There is no platform independent way to implement fcntl(fd, F_SETLK, &fl)
-    # via fcntl.fcntl. So use lockf instead
+
+    # https://github.com/xuelangZF/AnnotatedShadowSocks/issues/26
     try:
         fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 0, 0, os.SEEK_SET)
     except IOError:
@@ -92,15 +83,25 @@ def write_pid_file(pid_file, pid):
 
 
 def freopen(f, mode, stream):
+    """ Redirect predefined streams like stdin, stdout and stderr to specific files.
+
+    Just like freopen function implemented in c++ <stdio.h>
+    Ref: http://www.cplusplus.com/reference/cstdio/freopen/
+    """
     oldf = open(f, mode)
     oldfd = oldf.fileno()
     newfd = stream.fileno()
-    os.close(newfd)
+    os.close(newfd)             # Not needed actually, dup2 will close newfd if it's open.
     os.dup2(oldfd, newfd)
 
 
 def daemon_start(pid_file, log_file):
-    # fork only once because we are sure parent will exit
+    """ Fork the current process and make the child to be a single-instance daemon.
+
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/27
+    :param pid_file: used to make sure there is only one daemon process.
+    :param log_file: used to save the log info.
+    """
     pid = os.fork()
     assert pid != -1
 
@@ -109,21 +110,23 @@ def daemon_start(pid_file, log_file):
             sys.exit(0)
         sys.exit(1)
 
+    # Parent waits for child and exit.
     if pid > 0:
-        # parent waits for its child
+        # https://github.com/xuelangZF/AnnotatedShadowSocks/issues/28
         signal.signal(signal.SIGINT, handle_exit)
         signal.signal(signal.SIGTERM, handle_exit)
         time.sleep(5)
         sys.exit(0)
 
-    # child signals its parent to exit
     ppid = os.getppid()
     pid = os.getpid()
+    # There is already a daemon process running.
     if write_pid_file(pid_file, pid) != 0:
         os.kill(ppid, signal.SIGINT)
         sys.exit(1)
 
     print('started')
+    # Child send signal to its parent to exit.
     os.kill(ppid, signal.SIGTERM)
 
     sys.stdin.close()
@@ -137,6 +140,12 @@ def daemon_start(pid_file, log_file):
 
 
 def daemon_stop(pid_file):
+    """ Kill the daemon process if it's running.
+
+    After calling kill to stop the process,
+    wait at most 10 seconds and check if the process is stopped finally.
+    :param pid_file: The file from which we can get the process id.
+    """
     import errno
     try:
         with open(pid_file) as f:
@@ -146,8 +155,9 @@ def daemon_stop(pid_file):
                 logging.error('not running')
     except IOError as e:
         logging.error(e)
+
+        # No such pid_file, which means the daemon is not running.
         if e.errno == errno.ENOENT:
-            # always exit 0 if we are sure daemon is not running
             logging.error('not running')
             return
         sys.exit(1)
@@ -156,24 +166,27 @@ def daemon_stop(pid_file):
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError as e:
+            # No process with pid is running now, so just return 0.
             if e.errno == errno.ESRCH:
                 logging.error('not running')
-                # always exit 0 if we are sure daemon is not running
                 return
             logging.error(e)
             sys.exit(1)
     else:
         logging.error('pid is not positive: %d', pid)
 
-    # sleep for maximum 10s
+    # Sleep for maximum 10s to wait for the process stopped.
     for i in range(0, 200):
         try:
-            # query for the pid
+            # Check whether the process with pid is running or not.
+            # Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/30
             os.kill(pid, 0)
         except OSError as e:
             if e.errno == errno.ESRCH:
                 break
         time.sleep(0.05)
+
+    # Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/29
     else:
         logging.error('timed out when stopping pid %d', pid)
         sys.exit(1)
