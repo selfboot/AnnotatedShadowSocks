@@ -7,6 +7,9 @@ I'd like to read the code line by line, version by version, and have some notes 
 
 
 
+# Ref
+
+[How to Read Code (Eight Things to Remember)](https://spin.atomicobject.com/2017/06/01/how-to-read-code/)  
 
 
 
