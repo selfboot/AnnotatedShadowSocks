@@ -16,8 +16,10 @@ from shadowsocks import common, lru_cache, eventloop
 
 CACHE_SWEEP_INTERVAL = 30
 
+# Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/41
 VALID_HOSTNAME = re.compile(br"(?!-)[A-Z\d-]{1,63}(?<!-)$", re.IGNORECASE)
 
+# Dynamically add the method inet_pton and inet_ntop to the socket.
 common.patch_socket()
 
 # rfc1035
@@ -34,7 +36,7 @@ common.patch_socket()
 # |      Additional     | RRs holding additional information
 # +---------------------+
 #
-# header
+# Header
 #                                 1  1  1  1  1  1
 #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
 # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
@@ -50,7 +52,22 @@ common.patch_socket()
 # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 # |                    ARCOUNT                    |
 # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#
+# Question
+#                                     1  1  1  1  1  1
+#      0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#    |                                               |
+#    /                     QNAME                     /
+#    /                                               /
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#    |                     QTYPE                     |
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#    |                     QCLASS                    |
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 
+
+# TYPE, CLASS, QTYPE and QCLASS values can be found at #38
 QTYPE_ANY = 255
 QTYPE_A = 1
 QTYPE_AAAA = 28
@@ -60,9 +77,22 @@ QCLASS_IN = 1
 
 
 def build_address(address):
+    """ Convert domain name to QNAME used in the DNS Question section.
+
+    Return a sequence of labels, where each label consists of a
+    length octet followed by that number of octets.
+    The domain name terminates with the zero length octet
+    for the null label of the root.
+
+    Ref: RFC 1035 4.1.2. Question section format
+    UseCase: issue_codes.us_asyncdns.uc_build_address
+
+    :param address: domain name
+    """
     address = address.strip(b'.')
     labels = address.split(b'.')
     results = []
+    # Labels must be 63 characters or less.  Ref: RFC 1035
     for label in labels:
         l = len(label)
         if l > 63:
@@ -74,6 +104,10 @@ def build_address(address):
 
 
 def build_request(address, qtype, request_id):
+    """ Build a DNS request packet with the specified parameter.
+
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/40
+    """
     header = struct.pack('!HBBHHHH', request_id, 1, 0, 1, 0, 0, 0)
     addr = build_address(address)
     qtype_qclass = struct.pack('!HH', qtype, QCLASS_IN)
@@ -81,6 +115,16 @@ def build_request(address, qtype, request_id):
 
 
 def parse_ip(addrtype, data, length, offset):
+    """ Get the RDATA field from the RR(Resource Record).
+
+    RDATA is a variable length string of octets that describes the resource.
+    More details can be found on RFC 1035 and Issue #38
+    :param addrtype: TYPE of the resource record, can be A, AAAA, CNAME or NS.
+    :param data: The whole DNS packet.  Note the UDP and IP header is not contained.
+    :param length: The length of the RDATA field.
+    :param offset: Where this field start.
+    :return: The info RDATA field record.
+    """
     if addrtype == QTYPE_A:
         return socket.inet_ntop(socket.AF_INET, data[offset:offset + length])
     elif addrtype == QTYPE_AAAA:
@@ -92,28 +136,54 @@ def parse_ip(addrtype, data, length, offset):
 
 
 def parse_name(data, offset):
+    """ Get domain name from the response packet.
+
+    The domain system utilizes a compression scheme to reduce the size of messages.
+    Ref:
+    https://github.com/xuelangZF/AnnotatedShadowSocks/issues/38
+    https://github.com/xuelangZF/AnnotatedShadowSocks/issues/42
+
+    :param data: The whole DNS packet.  Note the UDP and IP header is not contained.
+    :param offset: Index specify where the hostname field start in DNS packet.
+    :return: A tuple. Firstly is the length of the NAME section, secondly is the hostname.
+    """
     p = offset
     labels = []
     l = common.ord(data[p])
+
+    # A sequence of labels ending in a zero octet.
     while l > 0:
+        # If NAME's first two bits are 11, then it's a pointer, we need to get the OFFSET.
         if (l & (128 + 64)) == (128 + 64):
-            # pointer
             pointer = struct.unpack('!H', data[p:p + 2])[0]
-            pointer &= 0x3FFF
+            pointer &= 0x3FFF                   # Get the offset
             r = parse_name(data, pointer)
             labels.append(r[1])
             p += 2
-            # pointer is the end
+            # Assert: pointer is always the domain name's end.
             return p - offset, b'.'.join(labels)
+        # Each label consists of a length octet followed by that number of octets.
         else:
             labels.append(data[p + 1:p + 1 + l])
             p += 1 + l
         l = common.ord(data[p])
     return p - offset + 1, b'.'.join(labels)
 
-
-# rfc1035
-# record
+# https://github.com/xuelangZF/AnnotatedShadowSocks/issues/38
+# Question section record
+#                                    1  1  1  1  1  1
+#      0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#    |                                               |
+#    /                     QNAME                     /
+#    /                                               /
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#    |                     QTYPE                     |
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#    |                     QCLASS                    |
+#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+#
+# Resource record format
 #                                    1  1  1  1  1  1
 #      0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
 #    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
@@ -134,8 +204,23 @@ def parse_name(data, offset):
 #    /                     RDATA                     /
 #    /                                               /
 #    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+
+
 def parse_record(data, offset, question=False):
+    """ Parse whether the question section or resource record.
+
+    The answer, authority, and additional sections all share the same format:
+    a variable number of resource records.
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/38
+
+    :param data: The whole DNS packet content, which is consist of bytes.
+    :param offset: Where this record start.
+    :param question: Flag to specify whether this is a question record or answer record.
+    :return: A tuple, firstly is the record's length, secondly is the concrete information.
+    """
+
     nlen, name = parse_name(data, offset)
+    # Parse the answer, authority, and additional sections.  Ref: issue #38
     if not question:
         record_type, record_class, record_ttl, record_rdlength = struct.unpack(
             '!HHiH', data[offset + nlen:offset + nlen + 10]
@@ -143,6 +228,7 @@ def parse_record(data, offset, question=False):
         ip = parse_ip(record_type, data, record_rdlength, offset + nlen + 10)
         return nlen + 10 + record_rdlength, \
             (name, ip, record_type, record_class, record_ttl)
+    # Parse the entries in question section.
     else:
         record_type, record_class = struct.unpack(
             '!HH', data[offset + nlen:offset + nlen + 4]
@@ -151,6 +237,10 @@ def parse_record(data, offset, question=False):
 
 
 def parse_header(data):
+    """ Get the header info from the original data.
+
+    Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/38
+    """
     if len(data) >= 12:
         header = struct.unpack('!HBBHHHH', data[:12])
         res_id = header[0]
@@ -158,8 +248,6 @@ def parse_header(data):
         res_tc = header[1] & 2
         res_ra = header[2] & 128
         res_rcode = header[2] & 15
-        # assert res_tc == 0
-        # assert res_rcode in [0, 3]
         res_qdcount = header[3]
         res_ancount = header[4]
         res_nscount = header[5]
@@ -170,7 +258,13 @@ def parse_header(data):
 
 
 def parse_response(data):
+    """ Parse the DNS packet and save the useful info into the DNSResponse class.
+
+    :param data: The whole DNS packet content, which is consist of bytes.
+    :return: Return a DNSResponse object if response is valid, else return None.
+    """
     try:
+        # DNS packet's header is larger than 12 octets.
         if len(data) >= 12:
             header = parse_header(data)
             if not header:
@@ -180,7 +274,9 @@ def parse_response(data):
 
             qds = []
             ans = []
-            offset = 12
+            offset = 12                 # Skip the header(12 octets).
+
+            # Parse all entries in question, answer, authority and additional records sections.
             for i in range(0, res_qdcount):
                 l, r = parse_record(data, offset, True)
                 offset += l
@@ -213,6 +309,10 @@ def parse_response(data):
 
 
 def is_ip(address):
+    """ Return IP family if address is a valid IP Address, else return False.
+
+    :param address: family-specific string format of IP address.
+    """
     for family in (socket.AF_INET, socket.AF_INET6):
         try:
             if type(address) != str:
@@ -225,6 +325,14 @@ def is_ip(address):
 
 
 def is_valid_hostname(hostname):
+    """ Return True is hostname is valid, otherwise return False.
+
+    Hostname is composed of series of labels concatenated with dots,
+    And there are some fundamentals should observe.  Details can be found:
+    https://github.com/xuelangZF/AnnotatedShadowSocks/issues/41
+
+    :param hostname: The type of hostname must be bytes.
+    """
     if len(hostname) > 255:
         return False
     if hostname[-1] == b'.':
@@ -233,10 +341,12 @@ def is_valid_hostname(hostname):
 
 
 class DNSResponse(object):
+    """ Simple class to record the major response info.
+    """
     def __init__(self):
         self.hostname = None
         self.questions = []  # each: (addr, type, class)
-        self.answers = []  # each: (addr, type, class)
+        self.answers = []    # each: (addr, type, class)
 
     def __str__(self):
         return '%s: %s' % (self.hostname, str(self.answers))
@@ -265,6 +375,11 @@ class DNSResolver(object):
         # TODO parse /etc/gai.conf and follow its rules
 
     def _parse_resolv(self):
+        """ Load the DNS server address from /etc/resolv.conf to the _servers list.
+
+        If resolv.conf has no DNS server specified, just us Google's server
+        Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/35
+        """
         self._servers = []
         try:
             with open('/etc/resolv.conf', 'rb') as f:
@@ -286,6 +401,10 @@ class DNSResolver(object):
             self._servers = ['8.8.4.4', '8.8.8.8']
 
     def _parse_hosts(self):
+        """ Load default ip and domain mappings from the hosts file to the _hosts dict.
+
+        Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/35
+        """
         etc_path = '/etc/hosts'
         if 'WINDIR' in os.environ:
             etc_path = os.environ['WINDIR'] + '/system32/drivers/etc/hosts'
@@ -305,6 +424,9 @@ class DNSResolver(object):
             self._hosts['localhost'] = '127.0.0.1'
 
     def add_to_loop(self, loop, ref=False):
+        """ Bind the resolver to specified EventLoop and add UDP socket to the loop.
+
+        """
         if self._loop:
             raise Exception('already add to loop')
         self._loop = loop
@@ -392,6 +514,12 @@ class DNSResolver(object):
                         del self._hostname_status[hostname]
 
     def _send_req(self, hostname, qtype):
+        """
+
+        :param hostname:
+        :param qtype:
+        :return:
+        """
         self._request_id += 1
         if self._request_id > 32768:
             self._request_id = 1
