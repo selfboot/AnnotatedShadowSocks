@@ -1,6 +1,8 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+# py 2.X
 
+from __future__ import print_function
 import socket
 import select
 import sys
@@ -12,7 +14,7 @@ server.setblocking(0)
 
 # Bind the socket to the port
 server_address = ('localhost', 10000)
-print >> sys.stderr, 'starting up on %s port %s' % server_address
+print('starting up on %s port %s' % server_address)
 server.bind(server_address)
 
 # Listen for incoming connections
@@ -37,7 +39,7 @@ fd_to_sockets = {server.fileno(): server}
 
 while True:
     # Wait for at least one of the sockets to be ready for processing
-    print >> sys.stderr, '\nWaiting for the next event'
+    print('\nWaiting for the next event')
     events = poller.poll(TIMEOUT)
 
     for fd, flag in events:
@@ -49,7 +51,7 @@ while True:
             # A readable server is ready to accept a connection
             if s is server:
                 connection, client_address = s.accept()
-                print >> sys.stderr, 'new connection from', client_address
+                print('new connection from', client_address)
                 connection.setblocking(0)
                 fd_to_sockets[connection.fileno()] = connection
                 poller.register(connection, READ_ONLY)
@@ -61,13 +63,13 @@ while True:
 
                 # A readable client socket has data
                 if data:
-                    print >> sys.stderr, 'received "%s" from %s' % (data, s.getpeername())
+                    print('received "%s" from %s' % (data, s.getpeername()))
                     # Add output channel for response
                     message_queues[s].put(data)
                     poller.modify(s, READ_WRITE)
                 else:
                     # Interpret empty result as closed connection
-                    print >> sys.stderr, 'closing ', client_address, 'after reading no data'
+                    print('closing ', client_address, 'after reading no data')
                     # Stop listening for input on the connection
                     poller.unregister(s)
                     s.close()
@@ -77,7 +79,7 @@ while True:
 
         elif flag & select.POLLHUP:
             # Client hung up
-            print >> sys.stderr, 'closing', client_address, ' after receiving HUP'
+            print('closing', client_address, ' after receiving HUP')
             # Stop listening for input on the connection
             poller.unregister(s)
             s.close()
@@ -87,14 +89,14 @@ while True:
                 next_msg = message_queues[s].get_nowait()
             except Queue.Empty:
                 # No message waiting so stop checking for writability
-                print >> sys.stderr, 'output queue for', s.getpeername(), 'is empty'
+                print('output queue for', s.getpeername(), 'is empty')
                 poller.modify(s, READ_ONLY)
             else:
-                print >> sys.stderr, 'sending "%s" to "%s"' % (next_msg, s.getpeername())
+                print('sending "%s" to "%s"' % (next_msg, s.getpeername()))
                 s.send(next_msg)
 
         elif flag & select.POLLERR:
-            print >> sys.stderr, 'handling exceptional condition for', s.getpeername()
+            print('handling exceptional condition for', s.getpeername())
             poller.unregister(s)
             s.close()
 

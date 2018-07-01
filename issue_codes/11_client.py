@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
 import socket
 import sys
 
@@ -15,20 +16,20 @@ socks = [socket.socket(socket.AF_INET, socket.SOCK_STREAM),
          socket.socket(socket.AF_INET, socket.SOCK_STREAM)]
 
 # Connect the socket to the port where the server is listening
-print >>sys.stderr, 'connecting to %s port %s' % server_address
+print('connecting to %s port %s' % server_address)
 for s in socks:
     s.connect(server_address)
 
 for message in messages:
     # Send message on both sockets
     for s in socks:
-        print >>sys.stderr, '%s: sending "%s"' % (s.getsockname(), message)
+        print('%s: sending "%s"' % (s.getsockname(), message))
         s.send(message)
 
     # Read response on both sockets
     for s in socks:
         data = s.recv(1024)
-        print >>sys.stderr, '%s: received "%s"' % (s.getsockname(), data)
+        print('%s: received "%s"' % (s.getsockname(), data))
         if not data:
-            print >> sys.stderr, 'closing socket', s.getsockname()
+            print('closing socket', s.getsockname())
             s.close()
