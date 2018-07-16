@@ -162,8 +162,8 @@ class EventLoop(object):
         """ Select I/O model depend on platform and do initial operator.
 
         self._impl: point to the select model we use.
-        self._fd_to_f: save the mapping relation between file descriptor and socket.
-        self._handlers: save the
+        self._fd_to_f: save the mapping relationship between file descriptor and socket.
+        self._handlers:
         self._ref_handlers:
         self._handlers_to_remove:
         """

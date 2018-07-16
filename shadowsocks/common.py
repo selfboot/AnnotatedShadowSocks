@@ -96,7 +96,6 @@ def inet_pton(family, addr):
 
     Reverse process of inet_ntop.
 
-
     :param family: Supported values for address_family are currently AF_INET and AF_INET6.
     :param addr: A standard, family-specific string representation of IP, such as '7.10.0.5' or '5aef:2b::8'.
     :return: A 32-bit packed IPv4 address (a string four characters in length) or 128-bit ipv6.

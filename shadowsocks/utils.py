@@ -16,7 +16,7 @@ VERBOSE_LEVEL = 5
 
 
 def check_python():
-    """ 确保 python 版本 2.6+ 或者是 3.3+
+    """ Make sure python version is 2.6+ or 3.3+
     """
     info = sys.version_info
     if info[0] == 2 and not info[1] >= 6:
@@ -31,8 +31,6 @@ def check_python():
 
 
 def print_shadowsocks():
-    """ 打印 shadowsocks 的版本号
-    """
     version = ''
     try:
         import pkg_resources
@@ -43,12 +41,12 @@ def print_shadowsocks():
 
 
 def find_config():
-    """ 返回默认配置文件的路径, 如果没有默认配置, 返回 None
+    """ Return default path of config file if it exist, else return None
 
-    首先在当前工作目录(current working directory) 查找是否有 config.json;
-    接着在本文件(utils.py)的上层目录查找是否有 config.json 文件;
+    Firstly, find `config.json` in current working directory.
+    If there's not the config file, then search in the parent directory.
 
-    注意:
+    Note:
     https://github.com/xuelangZF/AnnotatedShadowSocks/issues/1
     __file__ is the pathname of the file from which the module was loaded, if it was loaded from a file.
     __file__ constant is relative to the current working directory
@@ -57,7 +55,7 @@ def find_config():
     if os.path.exists(config_path):
         return config_path
 
-    # 注意，join函数中路径字符串前不能带 / .
+    # Note that the latter string in join function can't begin with the backslash
     # http://stackoverflow.com/questions/918154/relative-paths-in-python
     config_path = os.path.join(os.path.dirname(__file__), '../', 'config.json')
     if os.path.exists(config_path):
@@ -66,7 +64,7 @@ def find_config():
 
 
 def check_config(config):
-    """ 当配置中的参数不合理时, 给出适当的提示信息
+    """ Give some warning message if the conf is not safe enough.
     """
     if config.get('local_address', '') in [b'0.0.0.0']:
         logging.warn('warning: local set to listen on 0.0.0.0, it\'s not safe')
@@ -92,9 +90,9 @@ def check_config(config):
 
 
 def get_config(is_local):
-    """ 获取程序运行的配置信息
+    """ Get config info
 
-    :param is_local: 运行 local 还是 server
+    :param is_local: whether get local or server config
     """
     logging.basicConfig(level=logging.INFO,
                         format='%(levelname)-s: %(message)s')
@@ -105,22 +103,20 @@ def get_config(is_local):
         shortopts = 'hd:s:p:k:m:c:t:vq'
         longopts = ['help', 'fast-open', 'pid-file=', 'log-file=', 'workers=']
     try:
-
-        # 首先尝试从配置文件读取配置
         config_path = find_config()
-
-        # getopt 是类似于 C 的命令行解析： https://github.com/xuelangZF/AnnotatedShadowSocks/issues/2
+        # More about getopt: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/2
         optlist, args = getopt.getopt(sys.argv[1:], shortopts, longopts)
 
         for key, value in optlist:
             if key == '-c':
+                # Config path specified with -c filename
                 config_path = value
 
         if config_path:
             logging.info('loading config from %s' % config_path)
             with open(config_path, 'rb') as f:
                 try:
-                    # 配置文件是 json 格式的，将其加载到字典中（这里字典深度为1）
+                    # Config file must be a json file.
                     # https://github.com/xuelangZF/AnnotatedShadowSocks/issues/3
                     config = json.loads(f.read().decode('utf8'),
                                         object_hook=_decode_dict)
@@ -181,7 +177,7 @@ def get_config(is_local):
         print_help(is_local)
         sys.exit(2)
 
-    # 对于没有指定的配置参数，设置默认值
+    # Set default value for some key.
     config['password'] = config.get('password', '')
     config['method'] = config.get('method', 'aes-256-cfb')
     config['port_password'] = config.get('port_password', None)
@@ -243,8 +239,6 @@ def get_config(is_local):
 
 
 def print_help(is_local):
-    """ 打印ss的使用帮助
-    """
     if is_local:
         print_local_help()
     else:
@@ -252,7 +246,7 @@ def print_help(is_local):
 
 
 def print_local_help():
-    """ local 客户端命令选项提示, 提供对各个参数的解释。
+    """ The help message for local client.
     """
     print('''usage: sslocal [-h] -s SERVER_ADDR [-p SERVER_PORT]
                [-b LOCAL_ADDR] [-l LOCAL_PORT] -k PASSWORD [-m METHOD]
@@ -285,7 +279,7 @@ Online help: <https://github.com/clowwindy/shadowsocks>
 
 
 def print_server_help():
-    """ server 服务器端命令选项提示, 提供对各个参数的解释。
+    """ The help message for server.
     """
     print('''usage: ssserver [-h] [-s SERVER_ADDR] [-p SERVER_PORT] -k PASSWORD
                 -m METHOD [-t TIMEOUT] [-c CONFIG] [--fast-open]
@@ -317,9 +311,9 @@ Online help: <https://github.com/clowwindy/shadowsocks>
 
 
 def _decode_list(data):
-    """ 将 data 中的数据 deserialize 后保存在 list 中
+    """ Deserialize the unicode data to utf-8 bytes in list.
 
-    主要是对 data 中的 unicode string 进行 utf-8 编码
+    Convert every unicode string in list to utf-8 bytes.
     """
     rv = []
     for item in data:
@@ -334,10 +328,10 @@ def _decode_list(data):
 
 
 def _decode_dict(data):
-    """ 将data（类型为字典）中的数据 deserialize 后保存在 dict 中
+    """  Deserialize the unicode value to utf-8 bytes in dict.
 
-    主要是对 data 中的 unicode string 进行 utf-8 编码
-    该函数的作用，可以阅读 https://github.com/xuelangZF/AnnotatedShadowSocks/issues/4
+    Convert every unicode string in dict value to utf-8 bytes.
+    Refer: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/4
     """
     rv = {}
     for key, value in data.items():

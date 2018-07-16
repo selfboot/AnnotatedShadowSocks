@@ -99,7 +99,6 @@ class LRUCache(collections.MutableMapping):
 
         dict 类的使用方法： https://docs.python.org/2/library/stdtypes.html#mapping-types-dict .
 
-
         >>> a = dict(one=1, two=2, three=3)
         >>> b = {'one': 1, 'two': 2, 'three': 3}
         >>> c = dict(zip(['one', 'two', 'three'], [1, 2, 3]))
