@@ -10,12 +10,13 @@ json_content = u"""
     "server_port":8888,
     "local_address": "127.0.0.1",
     "local_port":1080,
-    "password":"selfboot",
+    "password":"self boot",
     "timeout":300,
     "method":"aes-256-cfb",
     "comments": ["中文内容", 1, 2]
 }
 """
+
 
 def _decode_list(data):
     rv = []
@@ -42,14 +43,16 @@ def _decode_dict(data):
         rv[key] = value
     return rv
 
-# Without object_hook
-config = json.loads(json_content)
-print(config)
 
-# With object_hook
-config_2 = json.loads(json_content, object_hook=_decode_dict)
-print(config_2)
+if __name__ == "__main__":
+    # Without object_hook
+    config = json.loads(json_content)
+    print(config)
 
-# json content is str before load.
-config_3 = json.loads(json_content.encode("utf-8"))
-print(config_3)
+    # With object_hook
+    config_2 = json.loads(json_content, object_hook=_decode_dict)
+    print(config_2)
+
+    # json content is str before load.
+    config_3 = json.loads(json_content.encode("utf-8"))
+    print(config_3)
