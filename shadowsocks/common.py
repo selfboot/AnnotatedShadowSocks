@@ -71,11 +71,9 @@ def inet_ntop(family, ipstr):
             (for example, b'7.10.0.5' or '5aef:2b::8')
 
     Usage:
-        >>> from shadowsocks.common import inet_pton, inet_ntop
-        >>> import socket
-        >>> inet_ntop(socket.AF_INET, 'abcd')
+        > inet_ntop(socket.AF_INET, 'abcd')
         '97.98.99.100'
-        >>> inet_ntop(socket.AF_INET6, 'abcdefghijklmnop')
+        > inet_ntop(socket.AF_INET6, 'abcdefghijklmnop')
         '6162:6364:6566:6768:696A:6B6C:6D6E:6F70'
 
     Ref: https://github.com/xuelangZF/AnnotatedShadowSocks/issues/9
@@ -99,8 +97,6 @@ def inet_pton(family, addr):
     :param family: Supported values for address_family are currently AF_INET and AF_INET6.
     :param addr: A standard, family-specific string representation of IP, such as '7.10.0.5' or '5aef:2b::8'.
     :return: A 32-bit packed IPv4 address (a string four characters in length) or 128-bit ipv6.
-
-    # TODO
     """
     addr = to_str(addr)
     if family == socket.AF_INET:

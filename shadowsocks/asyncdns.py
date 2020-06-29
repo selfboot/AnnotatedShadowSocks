@@ -85,7 +85,6 @@ def build_address(address):
     for the null label of the root.
 
     Ref: RFC 1035 4.1.2. Question section format
-    UseCase: issue_codes.us_asyncdns.uc_build_address
 
     :param address: domain name
     """
@@ -170,18 +169,6 @@ def parse_name(data, offset):
     return p - offset + 1, b'.'.join(labels)
 
 # https://github.com/xuelangZF/AnnotatedShadowSocks/issues/38
-# Question section record
-#                                    1  1  1  1  1  1
-#      0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
-#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-#    |                                               |
-#    /                     QNAME                     /
-#    /                                               /
-#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-#    |                     QTYPE                     |
-#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-#    |                     QCLASS                    |
-#    +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 #
 # Resource record format
 #                                    1  1  1  1  1  1
@@ -207,7 +194,7 @@ def parse_name(data, offset):
 
 
 def parse_record(data, offset, question=False):
-    """ Parse whether the question section or resource record.
+    """ Parse either the question section or resource record.
 
     The answer, authority, and additional sections all share the same format:
     a variable number of resource records.
@@ -359,6 +346,20 @@ STATUS_IPV6 = 1
 class DNSResolver(object):
 
     def __init__(self):
+        """
+        _loop: event loop object bind to.
+        _request_id: DNS request id used to map the request and response.
+        _hosts: dns records parsed from hosts file once initialized.
+        _hostname_status:
+        _hostname_to_cb: Mapping domain names to callback functions
+        _cb_to_hostname: Mapping callback functions to domain names, conversely
+        _cache: DNS record cache dict, such as {"localhost": "127.0.0.1"}
+        _last_time:
+        _sock:
+        _servers: DNS server address parsed from /etc/resolv.conf or default value if it's empty
+        _parse_resolv:
+        _parse_hosts:
+        """
         self._loop = None
         self._request_id = 1
         self._hosts = {}
@@ -425,7 +426,6 @@ class DNSResolver(object):
 
     def add_to_loop(self, loop, ref=False):
         """ Bind the resolver to specified EventLoop and add UDP socket to the loop.
-
         """
         if self._loop:
             raise Exception('already add to loop')
@@ -514,11 +514,7 @@ class DNSResolver(object):
                         del self._hostname_status[hostname]
 
     def _send_req(self, hostname, qtype):
-        """
-
-        :param hostname:
-        :param qtype:
-        :return:
+        """ Send DNS request to all DNS servers.
         """
         self._request_id += 1
         if self._request_id > 32768:
